@@ -123,7 +123,7 @@ client.once(Events.ClientReady, async () => {
   ];
 
   const guildId = '1393443854514130974';
-  const channelId = '1502594986393210940';
+  const channelId = '1502642107037388821';
 
   const guild = await client.guilds.fetch(guildId);
 
