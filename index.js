@@ -17,6 +17,21 @@ const sqlite3 = require('sqlite3').verbose();
 
 const ALLOWED_ROLE_ID = '1476817334126641237';
 
+/* ---------------- FIXED REWARDS ---------------- */
+
+const rewards = [
+  { reward: '300 steel', weight: 22 },
+  { reward: '$200 uranium', weight: 20 },
+  { reward: '250k', weight: 18 },
+  { reward: '$5M', weight: 10 },
+  { reward: '1000 gasoline', weight: 10 },
+  { reward: '1000 aluminium', weight: 5 },
+  { reward: 'Try Again Tomorrow', weight: 5 },
+  { reward: 'Try Again Tomorrow', weight: 5 },
+  { reward: 'Try Again Tomorrow', weight: 5 },
+  { reward: '$30M', weight: 1 }
+];
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -40,14 +55,6 @@ db.serialize(() => {
   `);
 
   db.run(`
-    CREATE TABLE IF NOT EXISTS rewards (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      reward TEXT,
-      weight INTEGER
-    )
-  `);
-
-  db.run(`
     CREATE TABLE IF NOT EXISTS stats (
       userId TEXT PRIMARY KEY,
       username TEXT,
@@ -58,18 +65,18 @@ db.serialize(() => {
 
 });
 
-/* ---------------- REWARD SCORING ---------------- */
+/* ---------------- REWARD SCORE SYSTEM ---------------- */
 
 function getRewardScore(reward) {
 
   const r = reward.toLowerCase();
 
-  if (r.includes('$10m')) return 100;
-  if (r.includes('$50k')) return 10;
-  if (r.includes('food')) return 5;
-  if (r.includes('aluminium')) return 15;
-  if (r.includes('war chest')) return 200;
-  if (r.includes('lucky')) return 80;
+  if (r.includes('$30m')) return 500;
+  if (r.includes('$5m')) return 100;
+  if (r.includes('uranium')) return 40;
+  if (r.includes('steel')) return 30;
+  if (r.includes('gasoline')) return 50;
+  if (r.includes('aluminium')) return 70;
   if (r.includes('try again')) return 0;
 
   return 10;
@@ -77,14 +84,18 @@ function getRewardScore(reward) {
 
 /* ---------------- WEIGHTED PICK ---------------- */
 
-function pickWeightedReward(rewards) {
+function pickWeightedReward() {
 
-  const total = rewards.reduce((s, r) => s + r.weight, 0);
+  const total = rewards.reduce((sum, r) => sum + r.weight, 0);
 
   let random = Math.random() * total;
 
   for (const r of rewards) {
-    if (random < r.weight) return r.reward;
+
+    if (random < r.weight) {
+      return r.reward;
+    }
+
     random -= r.weight;
   }
 
@@ -98,64 +109,33 @@ client.once(Events.ClientReady, async () => {
 
   const commands = [
     {
-      name: 'addreward',
-      description: 'Add reward with weight',
-      options: [
-        {
-          name: 'reward',
-          type: 3,
-          description: 'Reward name',
-          required: true
-        },
-        {
-          name: 'weight',
-          type: 4,
-          description: 'Chance weight (higher = more common)',
-          required: true
-        }
-      ]
+      name: 'leaderboard',
+      description: 'Show top spin players'
     },
     {
-      name: 'removereward',
-      description: 'Remove reward',
-      options: [
-        {
-          name: 'id',
-          type: 4,
-          description: 'Reward ID',
-          required: true
-        }
-      ]
-    },
-    {
-      name: 'listrewards',
-      description: 'Show all rewards'
+      name: 'mystats',
+      description: 'View your spin stats'
     },
     {
       name: 'resetspins',
       description: 'Reset all spins (admin only)'
-    },
-    {
-      name: 'leaderboard',
-      description: 'Show top players'
-    },
-    {
-      name: 'mystats',
-      description: 'View your stats'
     }
   ];
 
   const guildId = '1393443854514130974';
-  const channelId = '1502642107037388821';
+  const channelId = '1502594986393210940';
 
   const guild = await client.guilds.fetch(guildId);
+
   await guild.commands.set(commands);
 
   const channel = await client.channels.fetch(channelId);
 
   const embed = new EmbedBuilder()
     .setTitle('🎰 Daily Spin')
-    .setDescription('Click the button to spin once per day!')
+    .setDescription(
+      'Click the button below to spin once per day!'
+    )
     .setColor('Blue');
 
   const button = new ButtonBuilder()
@@ -163,7 +143,8 @@ client.once(Events.ClientReady, async () => {
     .setLabel('SPIN')
     .setStyle(ButtonStyle.Success);
 
-  const row = new ActionRowBuilder().addComponents(button);
+  const row = new ActionRowBuilder()
+    .addComponents(button);
 
   await channel.send({
     embeds: [embed],
@@ -178,97 +159,42 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (!interaction.isChatInputCommand()) return;
 
-  /* ADD REWARD */
-  if (interaction.commandName === 'addreward') {
+  /* ---------------- LEADERBOARD ---------------- */
 
-    const reward = interaction.options.getString('reward');
-    const weight = interaction.options.getInteger('weight');
-
-    db.get(`SELECT COUNT(*) as count FROM rewards`, (err, row) => {
-
-      if (row.count >= 10) {
-        return interaction.reply({ content: '❌ Max 10 rewards.', flags: 64 });
-      }
-
-      db.run(
-        `INSERT INTO rewards (reward, weight) VALUES (?, ?)`,
-        [reward, weight]
-      );
-
-      interaction.reply({
-        content: `✅ Added ${reward} (weight ${weight})`,
-        flags: 64
-      });
-
-    });
-  }
-
-  /* LIST */
-  if (interaction.commandName === 'listrewards') {
-
-    db.all(`SELECT * FROM rewards`, (err, rows) => {
-
-      if (!rows.length) {
-        return interaction.reply({ content: 'No rewards.', flags: 64 });
-      }
-
-      let text = '';
-      rows.forEach(r => {
-        text += `ID ${r.id} → ${r.reward} (w:${r.weight})\n`;
-      });
-
-      interaction.reply({
-        embeds: [new EmbedBuilder().setTitle('🎁 Rewards').setDescription(text)],
-        flags: 64
-      });
-
-    });
-  }
-
-  /* REMOVE */
-  if (interaction.commandName === 'removereward') {
-
-    db.run(`DELETE FROM rewards WHERE id = ?`, [
-      interaction.options.getInteger('id')
-    ]);
-
-    interaction.reply({ content: '🗑️ Removed', flags: 64 });
-  }
-
-  /* RESET */
-  if (interaction.commandName === 'resetspins') {
-
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return interaction.reply({ content: '❌ No permission', flags: 64 });
-    }
-
-    db.run(`DELETE FROM spins`, async () => {
-      await interaction.reply({ content: '🔄 Spins reset!', flags: 64 });
-    });
-  }
-
-  /* LEADERBOARD */
   if (interaction.commandName === 'leaderboard') {
 
-    db.all(`SELECT * FROM stats ORDER BY score DESC LIMIT 10`, (err, rows) => {
+    db.all(
+      `SELECT * FROM stats ORDER BY score DESC LIMIT 10`,
+      (err, rows) => {
 
-      if (!rows.length) {
-        return interaction.reply({ content: 'No data yet.', flags: 64 });
+        if (!rows.length) {
+          return interaction.reply({
+            content: 'No leaderboard data yet.',
+            flags: 64
+          });
+        }
+
+        let text = '';
+
+        rows.forEach((r, i) => {
+          text += `#${i + 1} ${r.username} — Score: ${r.score} | Spins: ${r.spins}\n`;
+        });
+
+        interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle('🏆 Spin Leaderboard')
+              .setDescription(text)
+              .setColor('Gold')
+          ]
+        });
+
       }
-
-      let text = '';
-      rows.forEach((r, i) => {
-        text += `#${i + 1} ${r.username} — Score: ${r.score} | Spins: ${r.spins}\n`;
-      });
-
-      interaction.reply({
-        embeds: [new EmbedBuilder().setTitle('🏆 Leaderboard').setDescription(text)]
-      });
-
-    });
+    );
   }
 
-  /* MY STATS */
+  /* ---------------- MY STATS ---------------- */
+
   if (interaction.commandName === 'mystats') {
 
     db.get(
@@ -277,7 +203,10 @@ client.on(Events.InteractionCreate, async interaction => {
       (err, row) => {
 
         if (!row) {
-          return interaction.reply({ content: 'No stats yet.', flags: 64 });
+          return interaction.reply({
+            content: 'No stats yet.',
+            flags: 64
+          });
         }
 
         interaction.reply({
@@ -285,15 +214,49 @@ client.on(Events.InteractionCreate, async interaction => {
             new EmbedBuilder()
               .setTitle('📊 Your Stats')
               .addFields(
-                { name: 'Spins', value: String(row.spins), inline: true },
-                { name: 'Score', value: String(row.score), inline: true }
+                {
+                  name: '🎰 Spins',
+                  value: String(row.spins),
+                  inline: true
+                },
+                {
+                  name: '🏆 Score',
+                  value: String(row.score),
+                  inline: true
+                }
               )
+              .setColor('Blue')
           ],
           flags: 64
         });
 
       }
     );
+  }
+
+  /* ---------------- RESET SPINS ---------------- */
+
+  if (interaction.commandName === 'resetspins') {
+
+    if (
+      !interaction.member.permissions.has(
+        PermissionsBitField.Flags.Administrator
+      )
+    ) {
+      return interaction.reply({
+        content: '❌ No permission.',
+        flags: 64
+      });
+    }
+
+    db.run(`DELETE FROM spins`, async () => {
+
+      await interaction.reply({
+        content: '🔄 All spins reset!',
+        flags: 64
+      });
+
+    });
   }
 
 });
@@ -309,11 +272,14 @@ client.on(Events.InteractionCreate, async interaction => {
     const member = interaction.member;
 
     /* ROLE CHECK */
+
     if (!member.roles.cache.has(ALLOWED_ROLE_ID)) {
+
       return interaction.reply({
         content: '❌ You are not allowed to spin.',
         flags: 64
       });
+
     }
 
     const today = new Date().toDateString();
@@ -324,54 +290,77 @@ client.on(Events.InteractionCreate, async interaction => {
       async (err, row) => {
 
         if (row) {
+
           return interaction.reply({
-            content: '❌ Already spun today.',
+            content: '❌ You already spun today.',
             flags: 64
           });
+
         }
 
-        db.all(`SELECT * FROM rewards`, async (err, rewards) => {
+        const reward = pickWeightedReward();
 
-          const reward = pickWeightedReward(rewards);
+        const score = getRewardScore(reward);
 
-          const score = getRewardScore(reward);
+        /* SAVE SPIN */
 
-          /* SAVE SPIN */
-          db.run(
-            `INSERT INTO spins VALUES (?, ?, ?, ?)`,
-            [interaction.user.id, interaction.user.username, reward, today]
-          );
+        db.run(
+          `INSERT INTO spins VALUES (?, ?, ?, ?)`,
+          [
+            interaction.user.id,
+            interaction.user.username,
+            reward,
+            today
+          ]
+        );
 
-          /* UPDATE STATS */
-          db.get(
-            `SELECT * FROM stats WHERE userId = ?`,
-            [interaction.user.id],
-            (err, row) => {
+        /* UPDATE STATS */
 
-              if (!row) {
-                db.run(
-                  `INSERT INTO stats (userId, username, spins, score) VALUES (?, ?, 1, ?)`,
-                  [interaction.user.id, interaction.user.username, score]
-                );
-              } else {
-                db.run(
-                  `UPDATE stats SET spins = spins + 1, score = score + ? WHERE userId = ?`,
-                  [score, interaction.user.id]
-                );
-              }
+        db.get(
+          `SELECT * FROM stats WHERE userId = ?`,
+          [interaction.user.id],
+          (err, row) => {
+
+            if (!row) {
+
+              db.run(
+                `INSERT INTO stats
+                 (userId, username, spins, score)
+                 VALUES (?, ?, 1, ?)`,
+                [
+                  interaction.user.id,
+                  interaction.user.username,
+                  score
+                ]
+              );
+
+            } else {
+
+              db.run(
+                `UPDATE stats
+                 SET spins = spins + 1,
+                     score = score + ?
+                 WHERE userId = ?`,
+                [
+                  score,
+                  interaction.user.id
+                ]
+              );
 
             }
-          );
 
-          await interaction.reply({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle('🎉 You Won!')
-                .setDescription(`${interaction.user} got:\n\n🏆 ${reward}`)
-                .setColor('Green')
-            ]
-          });
+          }
+        );
 
+        await interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle('🎉 Spin Result')
+              .setDescription(
+                `${interaction.user} won:\n\n🏆 ${reward}`
+              )
+              .setColor('Green')
+          ]
         });
 
       }
