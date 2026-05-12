@@ -32,6 +32,8 @@ const rewards = [
   { reward: '$30M', weight: 1 }
 ];
 
+/* ---------------- CLIENT ---------------- */
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -39,9 +41,9 @@ const client = new Client({
   ]
 });
 
-const db = new sqlite3.Database('./spins.db');
-
 /* ---------------- DATABASE ---------------- */
+
+const db = new sqlite3.Database('./spins.db');
 
 db.serialize(() => {
 
@@ -86,7 +88,10 @@ function getRewardScore(reward) {
 
 function pickWeightedReward() {
 
-  const total = rewards.reduce((sum, r) => sum + r.weight, 0);
+  const total = rewards.reduce(
+    (sum, r) => sum + r.weight,
+    0
+  );
 
   let random = Math.random() * total;
 
@@ -118,20 +123,32 @@ client.once(Events.ClientReady, async () => {
     },
     {
       name: 'spinhistory',
-      description: 'View your reward history'
+      description: 'View spin reward history',
+      options: [
+        {
+          name: 'user',
+          description: 'User to check',
+          type: 6,
+          required: false
+        }
+      ]
     },
     {
-      name: 'weeklyreport',
-      description: 'View all weekly rewards'
-    },
-    {
-      name: 'resetspins',
-      description: 'Reset all weekly spin records'
+      name: 'claimrewards',
+      description: 'Clear a player reward history',
+      options: [
+        {
+          name: 'user',
+          description: 'User to clear',
+          type: 6,
+          required: true
+        }
+      ]
     }
   ];
 
   const guildId = '1393443854514130974';
-  const channelId = '1502594986393210940';
+  const channelId = '1502642107037388821';
 
   const guild = await client.guilds.fetch(guildId);
 
@@ -172,20 +189,29 @@ client.on(Events.InteractionCreate, async interaction => {
   if (interaction.commandName === 'leaderboard') {
 
     db.all(
-      `SELECT * FROM stats ORDER BY score DESC LIMIT 10`,
+      `SELECT * FROM stats
+       ORDER BY score DESC
+       LIMIT 10`,
       (err, rows) => {
 
         if (!rows.length) {
+
           return interaction.reply({
             content: 'No leaderboard data yet.',
             flags: 64
           });
+
         }
 
         let text = '';
 
         rows.forEach((r, i) => {
-          text += `#${i + 1} ${r.username} — Score: ${r.score} | Spins: ${r.spins}\n`;
+
+          text +=
+            `#${i + 1} ${r.username} ` +
+            `— Score: ${r.score} ` +
+            `| Spins: ${r.spins}\n`;
+
         });
 
         interaction.reply({
@@ -206,15 +232,18 @@ client.on(Events.InteractionCreate, async interaction => {
   if (interaction.commandName === 'mystats') {
 
     db.get(
-      `SELECT * FROM stats WHERE userId = ?`,
+      `SELECT * FROM stats
+       WHERE userId = ?`,
       [interaction.user.id],
       (err, row) => {
 
         if (!row) {
+
           return interaction.reply({
             content: 'No stats yet.',
             flags: 64
           });
+
         }
 
         interaction.reply({
@@ -246,78 +275,42 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.commandName === 'spinhistory') {
 
+    const target =
+      interaction.options.getUser('user') ||
+      interaction.user;
+
     db.all(
       `SELECT * FROM spins
        WHERE userId = ?
        ORDER BY rowid DESC`,
-      [interaction.user.id],
+      [target.id],
       (err, rows) => {
 
         if (!rows.length) {
+
           return interaction.reply({
             content: 'No spin history found.',
             flags: 64
           });
+
         }
 
         let text = '';
 
         rows.forEach(r => {
+
           text += `${r.date} → ${r.reward}\n`;
+
         });
 
         interaction.reply({
           embeds: [
             new EmbedBuilder()
-              .setTitle('📜 Your Spin History')
+              .setTitle(
+                `📜 ${target.username}'s Spin History`
+              )
               .setDescription(text.slice(0, 4000))
               .setColor('Blue')
-          ],
-          flags: 64
-        });
-
-      }
-    );
-  }
-
-  /* ---------------- WEEKLY REPORT ---------------- */
-
-  if (interaction.commandName === 'weeklyreport') {
-
-    if (
-      !interaction.member.permissions.has(
-        PermissionsBitField.Flags.Administrator
-      )
-    ) {
-      return interaction.reply({
-        content: '❌ No permission.',
-        flags: 64
-      });
-    }
-
-    db.all(
-      `SELECT * FROM spins ORDER BY username`,
-      (err, rows) => {
-
-        if (!rows.length) {
-          return interaction.reply({
-            content: 'No records found.',
-            flags: 64
-          });
-        }
-
-        let text = '';
-
-        rows.forEach(r => {
-          text += `${r.username} → ${r.reward} (${r.date})\n`;
-        });
-
-        interaction.reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle('📦 Weekly Reward Report')
-              .setDescription(text.slice(0, 4000))
-              .setColor('Gold')
           ]
         });
 
@@ -325,29 +318,40 @@ client.on(Events.InteractionCreate, async interaction => {
     );
   }
 
-  /* ---------------- RESET SPINS ---------------- */
+  /* ---------------- CLAIM REWARDS ---------------- */
 
-  if (interaction.commandName === 'resetspins') {
+  if (interaction.commandName === 'claimrewards') {
 
     if (
       !interaction.member.permissions.has(
         PermissionsBitField.Flags.Administrator
       )
     ) {
+
       return interaction.reply({
         content: '❌ No permission.',
         flags: 64
       });
+
     }
 
-    db.run(`DELETE FROM spins`, async () => {
+    const target =
+      interaction.options.getUser('user');
 
-      await interaction.reply({
-        content: '🔄 Weekly spin records reset!',
-        flags: 64
-      });
+    db.run(
+      `DELETE FROM spins
+       WHERE userId = ?`,
+      [target.id],
+      async () => {
 
-    });
+        await interaction.reply({
+          content:
+            `✅ Cleared reward history for ${target.username}`,
+          flags: 64
+        });
+
+      }
+    );
   }
 
 });
@@ -364,16 +368,20 @@ client.on(Events.InteractionCreate, async interaction => {
 
     /* ROLE CHECK */
 
-    if (!member.roles.cache.has(ALLOWED_ROLE_ID)) {
+    if (
+      !member.roles.cache.has(ALLOWED_ROLE_ID)
+    ) {
 
       return interaction.reply({
-        content: '❌ You are not allowed to spin.',
+        content:
+          '❌ You are not allowed to spin.',
         flags: 64
       });
 
     }
 
-    const today = new Date().toDateString();
+    const today =
+      new Date().toDateString();
 
     db.get(
       `SELECT * FROM spins
@@ -385,20 +393,24 @@ client.on(Events.InteractionCreate, async interaction => {
         if (row) {
 
           return interaction.reply({
-            content: '❌ You already spun today.',
+            content:
+              '❌ You already spun today.',
             flags: 64
           });
 
         }
 
-        const reward = pickWeightedReward();
+        const reward =
+          pickWeightedReward();
 
-        const score = getRewardScore(reward);
+        const score =
+          getRewardScore(reward);
 
         /* SAVE SPIN */
 
         db.run(
-          `INSERT INTO spins VALUES (?, ?, ?, ?)`,
+          `INSERT INTO spins
+           VALUES (?, ?, ?, ?)`,
           [
             interaction.user.id,
             interaction.user.username,
@@ -410,7 +422,8 @@ client.on(Events.InteractionCreate, async interaction => {
         /* UPDATE STATS */
 
         db.get(
-          `SELECT * FROM stats WHERE userId = ?`,
+          `SELECT * FROM stats
+           WHERE userId = ?`,
           [interaction.user.id],
           (err, row) => {
 
@@ -418,8 +431,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
               db.run(
                 `INSERT INTO stats
-                 (userId, username, spins, score)
-                 VALUES (?, ?, 1, ?)`,
+                (userId, username, spins, score)
+                VALUES (?, ?, 1, ?)`,
                 [
                   interaction.user.id,
                   interaction.user.username,
@@ -459,6 +472,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     );
   }
+
 });
 
 /* ---------------- LOGIN ---------------- */
