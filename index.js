@@ -65,7 +65,7 @@ db.serialize(() => {
 
 });
 
-/* ---------------- REWARD SCORE SYSTEM ---------------- */
+/* ---------------- REWARD SCORE ---------------- */
 
 function getRewardScore(reward) {
 
@@ -117,13 +117,21 @@ client.once(Events.ClientReady, async () => {
       description: 'View your spin stats'
     },
     {
+      name: 'spinhistory',
+      description: 'View your reward history'
+    },
+    {
+      name: 'weeklyreport',
+      description: 'View all weekly rewards'
+    },
+    {
       name: 'resetspins',
-      description: 'Reset all spins (admin only)'
+      description: 'Reset all weekly spin records'
     }
   ];
 
   const guildId = '1393443854514130974';
-  const channelId = '1502642107037388821';
+  const channelId = '1502594986393210940';
 
   const guild = await client.guilds.fetch(guildId);
 
@@ -134,7 +142,7 @@ client.once(Events.ClientReady, async () => {
   const embed = new EmbedBuilder()
     .setTitle('🎰 Daily Spin')
     .setDescription(
-      'Click the button below to spin once per day!'
+      'Click below to spin once per day!'
     )
     .setColor('Blue');
 
@@ -234,6 +242,89 @@ client.on(Events.InteractionCreate, async interaction => {
     );
   }
 
+  /* ---------------- SPIN HISTORY ---------------- */
+
+  if (interaction.commandName === 'spinhistory') {
+
+    db.all(
+      `SELECT * FROM spins
+       WHERE userId = ?
+       ORDER BY rowid DESC`,
+      [interaction.user.id],
+      (err, rows) => {
+
+        if (!rows.length) {
+          return interaction.reply({
+            content: 'No spin history found.',
+            flags: 64
+          });
+        }
+
+        let text = '';
+
+        rows.forEach(r => {
+          text += `${r.date} → ${r.reward}\n`;
+        });
+
+        interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle('📜 Your Spin History')
+              .setDescription(text.slice(0, 4000))
+              .setColor('Blue')
+          ],
+          flags: 64
+        });
+
+      }
+    );
+  }
+
+  /* ---------------- WEEKLY REPORT ---------------- */
+
+  if (interaction.commandName === 'weeklyreport') {
+
+    if (
+      !interaction.member.permissions.has(
+        PermissionsBitField.Flags.Administrator
+      )
+    ) {
+      return interaction.reply({
+        content: '❌ No permission.',
+        flags: 64
+      });
+    }
+
+    db.all(
+      `SELECT * FROM spins ORDER BY username`,
+      (err, rows) => {
+
+        if (!rows.length) {
+          return interaction.reply({
+            content: 'No records found.',
+            flags: 64
+          });
+        }
+
+        let text = '';
+
+        rows.forEach(r => {
+          text += `${r.username} → ${r.reward} (${r.date})\n`;
+        });
+
+        interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle('📦 Weekly Reward Report')
+              .setDescription(text.slice(0, 4000))
+              .setColor('Gold')
+          ]
+        });
+
+      }
+    );
+  }
+
   /* ---------------- RESET SPINS ---------------- */
 
   if (interaction.commandName === 'resetspins') {
@@ -252,7 +343,7 @@ client.on(Events.InteractionCreate, async interaction => {
     db.run(`DELETE FROM spins`, async () => {
 
       await interaction.reply({
-        content: '🔄 All spins reset!',
+        content: '🔄 Weekly spin records reset!',
         flags: 64
       });
 
@@ -285,7 +376,9 @@ client.on(Events.InteractionCreate, async interaction => {
     const today = new Date().toDateString();
 
     db.get(
-      `SELECT * FROM spins WHERE userId = ? AND date = ?`,
+      `SELECT * FROM spins
+       WHERE userId = ?
+       AND date = ?`,
       [interaction.user.id, today],
       async (err, row) => {
 
