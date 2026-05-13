@@ -17,11 +17,13 @@ const sqlite3 = require('sqlite3').verbose();
 
 const ALLOWED_ROLE_ID = '1476817334126641237';
 
+const CHANNEL_ID = '1502642107037388821';
+
 /* ---------------- FIXED REWARDS ---------------- */
 
 const rewards = [
   { reward: '300 steel', weight: 22 },
-  { reward: '$200 uranium', weight: 20 },
+  { reward: '200 uranium', weight: 20 },
   { reward: '250k', weight: 18 },
   { reward: '$5M', weight: 10 },
   { reward: '1000 gasoline', weight: 10 },
@@ -144,17 +146,21 @@ client.once(Events.ClientReady, async () => {
           required: true
         }
       ]
+    },
+    {
+      name: 'fullreset',
+      description: 'Completely wipe all bot data'
     }
   ];
 
   const guildId = '1393443854514130974';
-  const channelId = '1502642107037388821';
 
   const guild = await client.guilds.fetch(guildId);
 
   await guild.commands.set(commands);
 
-  const channel = await client.channels.fetch(channelId);
+  const channel =
+    await client.channels.fetch(CHANNEL_ID);
 
   const embed = new EmbedBuilder()
     .setTitle('🎰 Daily Spin')
@@ -354,6 +360,41 @@ client.on(Events.InteractionCreate, async interaction => {
     );
   }
 
+  /* ---------------- FULL RESET ---------------- */
+
+  if (interaction.commandName === 'fullreset') {
+
+    if (
+      !interaction.member.permissions.has(
+        PermissionsBitField.Flags.Administrator
+      )
+    ) {
+
+      return interaction.reply({
+        content: '❌ No permission.',
+        flags: 64
+      });
+
+    }
+
+    db.run(`DELETE FROM spins`);
+
+    db.run(`DELETE FROM stats`);
+
+    await interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle('⚠️ Full Reset Complete')
+          .setDescription(
+            'All spin history and leaderboard data have been wiped.'
+          )
+          .setColor('Red')
+      ],
+      flags: 64
+    });
+
+  }
+
 });
 
 /* ---------------- SPIN SYSTEM ---------------- */
@@ -458,16 +499,41 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         );
 
-        await interaction.reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle('🎉 Spin Result')
-              .setDescription(
-                `${interaction.user} won:\n\n🏆 ${reward}`
-              )
-              .setColor('Green')
-          ]
-        });
+        /* JACKPOT CHECK */
+
+        const rewardData =
+          rewards.find(r => r.reward === reward);
+
+        const isJackpot =
+          rewardData.weight <= 1;
+
+        if (isJackpot) {
+
+          await interaction.reply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle('💰 JACKPOT!')
+                .setDescription(
+                  `🎉 ${interaction.user} hit the JACKPOT!\n\n🏆 ${reward}`
+                )
+                .setColor('Gold')
+            ]
+          });
+
+        } else {
+
+          await interaction.reply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle('🎉 Spin Result')
+                .setDescription(
+                  `${interaction.user} won:\n\n🏆 ${reward}`
+                )
+                .setColor('Green')
+            ]
+          });
+
+        }
 
       }
     );
