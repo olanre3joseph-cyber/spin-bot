@@ -45,7 +45,7 @@ const client = new Client({
 
 /* ---------------- DATABASE ---------------- */
 
-const db = new sqlite3.Database('./spins.db');
+const db = new sqlite3.Database('/data/spins.db');
 
 db.serialize(() => {
 
