@@ -22,12 +22,12 @@ const CHANNEL_ID = '1502642107037388821';
 /* ---------------- FIXED REWARDS ---------------- */
 
 const rewards = [
-  { reward: 'Tell a terrible joke in the assembly', weight: 22 },
+  { reward: '500 munitions', weight: 22 },
   { reward: '200 uranium', weight: 20 },
   { reward: 'Try Again Tomorrow', weight: 18 },
   { reward: '250k', weight: 10 },
   { reward: '1000 gasoline', weight: 10 },
-  { reward: '1000 aluminium', weight: 5 },
+  { reward: '1000 steel', weight: 5 },
   { reward: '$5M', weight: 5 },
   { reward: 'Try Again Tomorrow', weight: 5 },
   { reward: 'Try Again Tomorrow', weight: 5 },
